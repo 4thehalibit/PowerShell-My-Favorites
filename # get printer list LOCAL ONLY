@@ -1,0 +1,8 @@
+# get printer list LOCAL ONLY
+ 
+get-printer -ComputerName park-print-01
+ 
+ 
+# get printer list sort by port name 
+ 
+get-printer -ComputerName park-print-01 | Sort-Object -Property PortName 
