@@ -1,0 +1,8 @@
+# list of ALL printer local and shared on machine with soem details
+
+Get-WMIObject Win32_Printer -ComputerName $env:COMPUTERNAME 
+
+
+# Organized list of mapped printers on the machine
+
+Get-WMIObject Win32_Printer -ComputerName $env:COMPUTERNAME | where{$_.Name -like “*\\*”} | select sharename,name 
