@@ -1,0 +1,9 @@
+## This command installs the printer driver specified by Name on the remote computer specified by the ComputerName parameter.
+ 
+ Add-PrinterDriver -Name "Driver Name" -ComputerName "printServer"
+
+
+# Install Network/Shared printer
+
+add-printer -connectionname "\\SERVER\PRINTERNAME" 
+ 
