@@ -1,0 +1,15 @@
+################################
+# Set Out of Office for a User #
+################################
+
+# Import EMS Module with credentials
+ 
+#Import Modules
+Import-Module ActiveDirectory
+Add-PSSnapin  Microsoft.Exchange.Management.PowerShell.E2010
+
+# Set Message 
+
+Set-MailboxAutoReplyConfiguration -Identity kristal -AutoReplyState Scheduled -InternalMessage "Hello, I appreciate your attempt to connect with me today, but unfortunately I am no longer available at this email, or 
+organization. If you need immediate assistance, please contact our Call Center at 1-715-536-8351 and they will gladly redirect your call as needed. Thank you and goodbye" -StartTime 
+"06/09/2021 12:00" -EndTime "12/31/2222 09:00" -ExternalAudience All -ExternalMessage "<p>Hi,</p><p>I appreciate your attempt to connect with me today, but unfortunately I am no longer available at this email, or organization. If you need immediate assistance, please contact our Call Center at 1-715-536-8351 and they will gladly redirect your call as needed</p><p>Thank you and goodbye.</p><p>Mark</p>"
