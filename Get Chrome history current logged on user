@@ -1,0 +1,6 @@
+Copy-Item "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History" "c:\"
+ 
+$regex = '(htt(p|s))://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?'
+$value = Get-Content -Path "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History" | Select-String -AllMatches $regex |% {($_.Matches).value} |Sort -Unique
+ 
+Out-File -FilePath c:\hist.txt -InputObject $value
