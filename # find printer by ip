@@ -1,0 +1,2 @@
+# find printer by ip
+get-printer -ComputerName park-print-01 | Where-Object -property PortName -Like "10.4*"
