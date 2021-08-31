@@ -1,0 +1,10 @@
+# List of the mailbox names user needs access to.
+
+$mailboxes = "CardOrders","Lending Merrill","LoanLeads","PCCUdebit"
+$UserName = "username"
+
+# loop to add FullAcceess permissions to above mailboxes.
+foreach ($mailbox in $mailboxes) 
+{
+Add-MailboxPermission -Identity $mailbox -User "$UserName" -AccessRights FullAccess
+}
