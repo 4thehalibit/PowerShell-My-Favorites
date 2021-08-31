@@ -1,0 +1,10 @@
+{
+# Find Guid Local Computer
+ 
+get-wmiobject Win32_Product | Format-Table IdentifyingNumber, Name, LocalPackage -AutoSize
+ 
+# Uninstall GUID Local Computer
+ 
+$uninstallProduct =  $(get-wmiobject win32_product | ? {$_.IdentifyingNumber -like "{1D2B624D-D0E5-44A5-9047-CAF03363A66E}"}).uninstall()
+ 
+}
