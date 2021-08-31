@@ -1,0 +1,38 @@
+### Get Member from a specific group 
+#copy and paste from grid view to excel or anywhere else
+# Name Only
+ 
+$ADGroupName = "administrators"
+Get-ADGroupMember -identity “$ADGroupName” | select name | Out-GridView 
+
+------------------------------------------------------------------------------------------------------------------
+
+### Get Member from a specific group
+# copy and paste from grid view to excel or anywhere else
+# Name , distinguished name
+ 
+$ADGroupName = "administrators"
+$ExportPath = "C:OutputGroupmembers.csv"
+Get-ADGroupMember -Identity "$ADGroupName" | Select-Object name, objectClass,distinguishedName |Out-GridView
+
+------------------------------------------------------------------------------------------------------------------
+
+### List group memberships of a specific user in grid-view
+ 
+[CmdletBinding(SupportsShouldProcess=$True)] 
+Param( 
+    [Parameter(Mandatory = $True)] 
+    [String]$UserName 
+) 
+Import-Module ActiveDirectory 
+If ($UserName) { 
+    $UserName = $UserName.ToUpper().Trim() 
+    $Res = (Get-ADPrincipalGroupMembership $UserName | Measure-Object).Count 
+    If ($Res -GT 0) { 
+        Write-Output "`n" 
+        Write-Output "$UserName AD Group Membership:" 
+        Write-Output "===========================================================" 
+        Get-ADPrincipalGroupMembership $UserName | Select-Object -Property Name | Sort-Object -Property Name | Out-GridView
+        
+          } 
+}
