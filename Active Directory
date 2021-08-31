@@ -1,0 +1,1 @@
+Get-ADUser -Filter * -Properties * | Where { $_.Enabled -eq $True} | Select givenname, surname, mail, ipphone, telephonenumber, title, office, @{Name="ManagerEmail";Expression={(get-aduser -property emailaddress $_.manager).emailaddress}} | Out-GridView
