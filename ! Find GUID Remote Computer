@@ -1,3 +1,0 @@
-{
-# Find GUID Remote Computer
- get-wmiobject Win32_Product -ComputerName M11803 | Format-Table IdentifyingNumber, Name, LocalPackage -AutoSize

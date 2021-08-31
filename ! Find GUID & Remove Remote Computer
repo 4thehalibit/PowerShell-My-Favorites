@@ -1,0 +1,9 @@
+{
+# Find GUID Remote Computer
+ 
+get-wmiobject Win32_Product -ComputerName M11803 | Format-Table IdentifyingNumber, Name, LocalPackage -AutoSize
+
+
+# Uninstall GUID Remote Computer
+
+$uninstallProduct =  $(get-wmiobject win32_product -ComputerName M | ? {$_.IdentifyingNumber -like "{6FA2A438-E76E-4FA0-AD5F-ABE56F1A4E0E}"}).uninstall() 
