@@ -1,0 +1,19 @@
+## Check folder sizes
+
+Get-MailboxFolderStatistics -Identity  <username>  | select name, foldersize, itemsinfolder | sort FolderSize -Descending
+
+## Example
+
+Name                                                              FolderSize                                         ItemsInFolder
+----                                                                   ----------                                               -------------
+Top of Information Store                           0 B (0 bytes)                                                       0
+Calendar                                                       49.89 KB (51,083 bytes)                                 11
+Contacts                                                       26.75 KB (27,388 bytes)                                  7
+Conversation Action Settings                   0 B (0 bytes)                                                            0
+Deleted Items                                             0 B (0 bytes)                                                 0
+Drafts                                                           0 B (0 bytes)                                          0
+Import1                                                       0 B (0 bytes)                                             0
+Calendar                                                     0 B (0 bytes)                                              0
+Contacts                                                     0 B (0 bytes)                                              0
+Conversation Action Settings                 0 B (0 bytes)                                                              0
+Deleted Items                                            0 B (0 bytes)                                                  0
