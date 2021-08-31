@@ -1,0 +1,5 @@
+## Connect to Exchange Management Console Remotely
+ 
+$UserCredential = Get-Credential
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://SERVER/PowerShell/ -Authentication Kerberos -Credential $UserCredential
+Import-PSSession $Session
