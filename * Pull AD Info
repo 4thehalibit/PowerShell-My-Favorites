@@ -45,9 +45,9 @@ $AllADUsers | Sort-Object Name | Select-Object `
 #@{Label = "Department"; Expression = { $_.Department } },
 @{Label = "Company"; Expression = { $_.Company } },
 
-@{Label = "Manager"; Expression = { % { (get-aduser -property emailaddress $_.manager).emailaddress } } },
+@{Label = "Manager"; Expression = { % { (Get-AdUser $_.Manager -Properties DisplayName).DisplayName } } },
+@{Label = "Manager Email"; Expression = { % { (get-aduser -property emailaddress $_.manager).emailaddress } } },
                                       
-
 #@{Label = "Description"; Expression = { $_.Description } },
 @{Label = "Office"; Expression = { $_.Office } },
 @{Label = "Telephone number"; Expression = { $_.telephoneNumber } },
