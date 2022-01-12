@@ -10,8 +10,9 @@ Script Name: TerminateUser.ps1
 # membership, removing user from groups, archiving user folders, forwarding their
 # future emails, and disabling ActiveSync.
 #
-# Note: Skips the following protected users; ValM, JackM, Smatthias, JanetS, Shawna
-#
+# Note: Skips the following protected users; UserA, UserB, UserC
+# Does not allow protected users to be deleted without confirming with 
+# admin or security manager include a name and extension
 # ********************************************************************************
  
 #Import Modules
@@ -19,11 +20,11 @@ Import-Module ActiveDirectory
 Add-PSSnapin  Microsoft.Exchange.Management.PowerShell.E2010
  
 # Set Variables 
-$NetAdmin = "Sarah Matthias x4224"
-$SecMgr = "Amy Hickey x4267"
-$PathLog = "\\PARKCITYDC\Shared\IT Department\Employee Logs\Terminations"
+$NetAdmin = "Admin"
+$SecMgr = "Manager"
+$PathLog = "\\DC\Shared\Department\Employee Logs\Terminations"
 $Random = -join (1..18 | ForEach {((65..90) + (33..47) + (97..122) | % {[char]$_}) | Get-Random})
-$ProtectedUsers = "ValM", "JackM", "Smatthias", "JanetS", "Shawna"
+$ProtectedUsers = "UserA", "UserB", "UserC"
 $DTStamp = get-date -Format u | foreach {$_ -replace ":", "-"}
 $TDate = Get-Date
  
