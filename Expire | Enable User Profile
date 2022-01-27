@@ -1,0 +1,54 @@
+
+
+# Set RUN AS user and Password
+if($credentials -eq $null){
+    $credentials = Get-Credential "$env:userdomain\$env:USERNAME"
+}
+
+
+# Set Args
+$scriptDefaultArgs = '-executionpolicy bypass'
+# Set CSV Path
+$csvFilePath = "C:\SCHEDULED_TASKS\VacationUsers\vacation.csv"
+
+## CSV STYLE
+# User, DisabledDate, EnabledDate, Entered
+# You may then check task scheduler to see if the task was created
+
+# static Scheduled Task settings
+$STSettings = New-ScheduledTaskSettingsSet -RunOnlyIfNetworkAvailable -StartWhenAvailable 
+$STSettings.DeleteExpiredTaskAfter = "PT0S"
+$STPrinciple = New-ScheduledTaskPrincipal -LogonType S4U -RunLevel Highest  -UserId $credentials.UserName
+
+# Import CSV 
+$accounts = Import-Csv $csvFilePath 
+
+
+foreach ($account in $accounts){
+    if($account.entered -eq "completed" -or !$account ){continue}
+    if((get-date $account.DisableDate) -lt (get-date)){$account.DisableDate = (get-date).AddMinutes(1).ToString("MM/dd/yyyy HH:mm:ss")}
+    if((get-date $account.EnableDate) -lt (get-date)){$account.EnableDate = (get-date).AddMinutes(2).ToString("MM/dd/yyyy HH:mm:ss")}
+    # Created Scheduled Task #
+   
+    # Enable User Task
+    $STactionEnableUser = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "$scriptDefaultArgs -command `"clear-adaccountexpiration -identity $($account.user)`"" 
+    $STEnableTrigger = New-ScheduledTaskTrigger  -Once -At $account.enableDate  
+    #$STEnableTrigger.EndBoundary = (get-date $account.EnableDate).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss")
+    $STDef = New-ScheduledTask  -Action $STactionEnableUser -Trigger $STEnabletrigger -Settings $STSettings -Description "enable $($account.user)"
+    $STDef.Triggers[0].EndBoundary = (get-date $account.EnableDate).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss")
+    $task = Register-ScheduledTask -TaskName "Enable $($account.user)" -InputObject $STDef  -User $credentials.UserName -Password $credentials.GetNetworkCredential().Password
+    
+    
+    $STactionDisableUser = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "$scriptDefaultArgs -command `"set-adaccountexpiration -identity $($account.user) -datetime $($account.disableDate)`""
+    $STDisableTrigger = New-ScheduledTaskTrigger -Once -At $account.disableDate
+    #$STDisableTrigger.EndBoundary = (get-date $account.DisableDate).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss") 
+    $STDef = New-ScheduledTask  -Action $STactionDisableUser -Trigger $STDisabletrigger -Settings $STSettings -Description "disable $($account.user)"
+    $STDef.Triggers[0].EndBoundary = (get-date $account.EnableDate).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss")
+    $task = Register-ScheduledTask -TaskName "Disable $($account.user)" -InputObject $STDef  -User $credentials.UserName -Password $credentials.GetNetworkCredential().Password
+
+    $account.entered = "Completed"
+    
+}
+
+$accounts | Export-Csv -Path $csvFilePath -Force -NoTypeInformation
+
