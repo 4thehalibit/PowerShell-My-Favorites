@@ -1,0 +1,27 @@
+<#
+I ran across an issue where staff was using th edescription field for title.
+This will move the description field to the title field
+#>
+
+# Setup as many OU pre reqs as you may need
+
+$MQO = 'OU=Users,OU=    ,OU=   ,DC=   ,DC=local
+
+
+
+
+$Users = Get-ADUser -Filter { Description -like '*' } -SearchBase "$MQ" -Properties Description
+
+foreach( $User in $Users ){
+    try{
+        Set-ADObject -Identity $User.DistinguishedName -Replace @{ Title = $User.Description } -ErrorAction Stop -ErrorVariable 'ErrorMessage'
+
+        Write-Verbose "Successfully set title for $($User.Name)" -Verbose
+        }
+    catch{
+        Write-Warning "Failed to set title for $($User.Name)"
+        Write-Warning "UserName: $($User.SamAccountName)`tDescription: $($User.Description)"
+        Write-Warning "Error Message:`n$ErrorMessage"
+        }  
+    }
+    
