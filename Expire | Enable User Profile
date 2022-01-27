@@ -50,5 +50,5 @@ foreach ($account in $accounts){
     
 }
 
-$accounts | Export-Csv -Path $csvFilePath -Force -NoTypeInformation
+$accounts | Export-Csv -Path $csvFilePath -Force -NoTypeInformation 
 
