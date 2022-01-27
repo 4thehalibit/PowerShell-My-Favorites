@@ -1,0 +1,29 @@
+# Creating Credential Object
+$SecureString = ConvertTo-SecureString $env:NewPin -AsPlainText -Force
+
+if(!(test-path "hklm:\SOFTWARE\Policies\Microsoft\FVE")){
+    New-Item -path "hklm:\SOFTWARE\Policies\Microsoft" -Name "FVE" -force
+}
+
+# Creating Reg Keys for Local Policy enforcement
+New-ItemProperty -Path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "UseTPMPIN" -Value 1 -propertytype DWORD -Force
+New-ItemProperty -path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "UseAdvancedStartup" -Value 1 -propertytype DWORD -Force
+New-ItemProperty -path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "UseEnhancedPin" -Value 1 -PropertyType DWORD -Force
+New-ItemProperty -Path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "EnableBDEWithNoTPM" -Value 1 -PropertyType DWORD -Force
+New-ItemProperty -Path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "DisallowStandardUserPINReset" -Value 1 -PropertyType DWORD -Force
+New-ItemProperty -Path "hklm:\SOFTWARE\Policies\Microsoft\FVE" -name "EnableBDEWithNoTPM" -Value 1 -PropertyType DWORD -Force
+
+$bitlocker = Get-BitLockerVolume -MountPoint "C:"
+if($bitlocker.protectionstatus -eq "off"){
+    # Setting Bitlocker Pin
+    Enable-BitLocker -MountPoint "C:" -EncryptionMethod Aes256 -RecoveryPasswordProtector -Verbose
+    Add-BitLockerKeyProtector -MountPoint "C:" -TpmAndPinProtector -Pin $SecureString -Verbose
+} else {
+    Add-BitLockerKeyProtector -MountPoint "C:" -TpmAndPinProtector -Pin $SecureString -Verbose
+}
+
+write-host (Get-BitLockerVolume -MountPoint "C:").keyprotector
+
+if ($env:reboot -eq $true) {
+    Restart-Computer -Force 
+}
