@@ -1,0 +1,217 @@
+# google chrome downloader/verifier/installer :: build 20/seagull
+
+function getProxyData {
+    if (([IntPtr]::size) -eq 4) {$configLoc="$env:SystemDrive\Program Files\CentraStage\CagService.exe.config"} else {$configLoc="$env:SystemDrive\Program Files (x86)\CentraStage\CagService.exe.config"}
+	[xml]$varPlatXML= get-content "$configLoc" -ErrorAction SilentlyContinue
+	$script:varProxyLoc=($varPlatXML.configuration.applicationSettings."CentraStage.Cag.Core.AppSettings".setting | Where-Object {$_.Name -eq 'ProxyIp'}).value
+    $script:varProxyPort=($varPlatXML.configuration.applicationSettings."CentraStage.Cag.Core.AppSettings".setting | Where-Object {$_.Name -eq 'ProxyPort'}).value
+}
+
+function downloadFile { #downloadFile build 31/seagull :: copyright datto, inc.
+
+    param (
+        [parameter(mandatory=$false)]$url,
+        [parameter(mandatory=$false)]$whitelist,
+        [parameter(mandatory=$false)]$filename,
+        [parameter(mandatory=$false,ValueFromPipeline=$true)]$pipe
+    )
+
+    function setUserAgent {
+        $script:WebClient = New-Object System.Net.WebClient
+    	$script:webClient.UseDefaultCredentials = $true
+        $script:webClient.Headers.Add("X-FORMS_BASED_AUTH_ACCEPTED", "f")
+        $script:webClient.Headers.Add([System.Net.HttpRequestHeader]::UserAgent, 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.2; .NET CLR 1.0.3705;)');
+    }
+
+    if (!$url) {$url=$pipe}
+    if (!$whitelist) {$whitelist="the required web addresses."}
+	if (!$filename) {$filename=$url.split('/')[-1]}
+	
+    try { #enable TLS 1.2
+		[Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
+    } catch [system.exception] {
+		write-host "- ERROR: Could not implement TLS 1.2 Support."
+		write-host "  This can occur on Windows 7 devices lacking Service Pack 1."
+		write-host "  Please install that before proceeding."
+		exit 1
+    }
+	
+	write-host "- Downloading: $url"
+    if ($env:CS_PROFILE_PROXY_TYPE -eq "0" -or !$env:CS_PROFILE_PROXY_TYPE) {$useProxy=$false} else {$useProxy=$true}
+
+	if ($useProxy) {
+        setUserAgent
+        getProxyData
+        write-host ": Proxy location: $script:varProxyLoc`:$script:varProxyPort"
+	    $script:WebClient.Proxy = New-Object System.Net.WebProxy("$script:varProxyLoc`:$script:varProxyPort",$true)
+	    $script:WebClient.DownloadFile("$url","$filename")
+		if (!(test-path $filename)) {$useProxy=$false}
+    }
+
+	if (!$useProxy) {
+		setUserAgent #do it again so we can fallback if proxy fails
+		$script:webClient.DownloadFile("$url","$filename")
+	} 
+
+    if (!(test-path $filename)) {
+        write-host "- ERROR: File $filename could not be downloaded."
+        write-host "  Please ensure you are whitelisting $whitelist."
+        write-host "- Operations cannot continue; exiting."
+        exit 1
+    } else {
+        write-host "- Downloaded:  $filename"
+    }
+}
+
+function verifyPackage ($file, $certificate, $thumbprint, $name, $url) {
+    $varChain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
+    try {
+        $varChain.Build((Get-AuthenticodeSignature -FilePath "$file").SignerCertificate) | out-null
+    } catch [System.Management.Automation.MethodInvocationException] {
+        write-host "- ERROR: $name installer did not contain a valid digital certificate."
+        write-host "  This could suggest a change in the way $name is packaged; it could"
+        write-host "  also suggest tampering in the connection chain."
+        write-host "- Please ensure $url is whitelisted and try again."
+       write-host "  If this issue persists across different devices, please file a support ticket."
+    }
+
+    $varIntermediate=($varChain.ChainElements | ForEach-Object {$_.Certificate} | Where-Object {$_.Subject -match "$certificate"}).Thumbprint
+
+    if ($varIntermediate -ne $thumbprint) {
+        write-host "- ERROR: $file did not pass verification checks for its digital signature."
+        write-host "  This could suggest that the certificate used to sign the $name installer"
+        write-host "  has changed; it could also suggest tampering in the connection chain."
+        write-host `r
+        if ($varIntermediate) {
+            write-host ": We received: $varIntermediate"
+            write-host "  We expected: $thumbprint"
+            write-host "  Please report this issue."
+        }
+        write-host "- Installation cannot continue. Exiting."
+        exit 1
+    } else {
+        write-host "- Digital Signature verification passed."
+    }
+}
+
+function checkCode ($code) {
+    switch ($code) {
+        Default {
+            write-host "- Installation exited with code $code. This may indicate an error."
+        } 1603 {
+            write-host "- ERROR: Installation reported exit code 1603."
+            write-host "  This is a generic Windows Installer error indicating a failure; please scrutinise"
+            write-host "  the Windows Event Log on this device to see what the issue is."
+            exit 1    
+        } 0 {
+            write-host "- Installation succeeded."
+        } $null {
+            write-host "- Installation succeeded."
+        }
+    }
+}
+
+function getComment ($file) { # from code by tobias weltner
+$FullPath = (Resolve-Path $file).Path
+$shell = New-Object -COMObject Shell.Application
+$folder = Split-Path $FullPath
+$shellfolder = $shell.Namespace($folder)
+$shellfile = $shellfolder.ParseName($file)
+$shellfolder.GetDetailsOf($shellfile, 24) -as [string]
+}
+
+function getGUID2 ($softwareTitle) {
+    ("HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall","HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall") | % {
+        gci -Path $_ | % { Get-ItemProperty $_.PSPath } | ? { $_.DisplayName -match $softwareTitle } | ? {$_.PSChildName -match '}$'} | % {$_.PSChildName}
+    }
+}
+
+#============================================================================
+
+write-host "Software: Google Chrome"
+write-host "=========================================="
+
+#########################################################################################################################################
+# ascertain what to download based on what the system already has on it and what it can run :: © datto RMM
+
+if ((get-itemproperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" -Name DisplayName -ErrorAction SilentlyContinue).DisplayName -match 'Google Chrome') {
+    #64-bit device :: EXE
+    if ((get-itemproperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" -Name InstallLocation -ErrorAction SilentlyContinue).InstallLocation -match 'x86') {
+        $varArch='e'                   #32on64/EXE
+        write-host "- Google Chrome (32-on-64/EXE) detected. Upgrading to latest 32-bit (MSI) distribution."
+    } else {
+        $varArch='e64'                 #native64/EXE
+        write-host "- Google Chrome (x64 Native/EXE) detected. Upgrading to latest 64-bit (MSI) distribution."
+    }
+}
+
+if ((get-itemproperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" -Name DisplayName -ErrorAction SilentlyContinue).DisplayName -match 'Google Chrome') {
+    #native installation :: EXE
+    if ([intptr]::Size -eq 4) {        #native32/EXE
+        $varArch='e'
+        write-host "- Google Chrome (x86 Native/EXE) detected. Upgrading to latest 32-bit (MSI) distribution."
+    } else {                           #native64/EXE
+        $varArch='e64'
+        write-host "- Google Chrome (x64 Native/EXE) detected. Upgrading to latest 64-bit (MSI) distribution."
+    }
+}
+
+if ($varChromeGUID) {
+    #MSI installation
+    if ((get-itemproperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$varChromeGUID" -Name InstallLocation -ErrorAction SilentlyContinue).DisplayName -match 'Google Chrome') {
+        $varArch='e'                   #32on64/MSI
+        write-host "- Google Chrome (32-on-64/MSI) detected. Upgrading to latest 32-bit (MSI) distribution."
+    } else {
+        #native installation :: MSI
+        if ([intptr]::Size -eq 4) {    #native32/MSI
+            $varArch='e'
+            write-host "- Google Chrome (x86 Native/MSI) detected. Upgrading to latest 32-bit (MSI) distribution."
+        } else {                       #native64/MSI
+            $varArch='e64'
+            write-host "- Google Chrome (x64 Native/MSI) detected. Upgrading to latest 64-bit (MSI) distribution."
+        }
+    }
+}
+
+if (!$varArch) {
+    #no installation
+    if ([intptr]::Size -eq 4) {        #native32/fresh
+        $varArch='e'
+        write-host "- 32-bit device. Installing latest 32-bit (MSI) distribution."
+    } else {                           #native64/fresh
+        $varArch='e64'
+        write-host "- 64-bit device. Installing latest 64-bit (MSI) distribution."
+    }
+}
+
+#x64 override
+if ($env:usrChrome64Override -match 'true') {
+    if ([intptr]::Size -eq 8) {
+        write-host "- 64-bit override set. Chrome 64-bit will replace any x86 installation."
+        $varArch='e64'
+    } else {
+        write-host "- 64-bit override set; however, this device cannot run 64-bit instructions."
+        write-host "  Script will retain the architecture setting previously ascertained from the system."
+    }
+}
+
+#########################################################################################################################################
+
+#download it
+downloadFile "http://dl.google.com/edgedl/chrome/install/GoogleChromeStandaloneEnterpris$varArch.msi" "http://dl.google.com" "Chrome.msi"
+verifyPackage "Chrome.msi" "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1" "7B0F360B775F76C94A12CA48445AA2D2A875701C" "Chrome" "http://dl.google.com"
+
+#install it
+write-host "- Installing Google Chrome (version $(getComment "Chrome.msi"))"
+msiexec /i Chrome.msi /qn /NORESTART
+checkCode $LASTEXITCODE
+
+write-host "- Google Chrome successfully downloaded and installed at $(get-date)."
+
+#32-bit?
+if ($varArch -match '^e$') {
+    write-host "=========================================="
+    write-host "In some instances, Google Chrome 32-bit artefacts are found which can cause 64-bit installations to revert to 32-bit."
+    write-host "To override this and always install 64-bit where available, set a Site- or Account-level variable named `"usrChrome64Override`""
+    write-host "with the value `"TRUE`" and re-run this Component."
+}
