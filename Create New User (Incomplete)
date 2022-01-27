@@ -1,0 +1,238 @@
+# ********************************************************************************
+#
+# Script Name: New_User.ps1
+# Version: 1.0
+# Author: Sheridan Wendt
+# Date: 9/15/2017
+# Applies to: Users
+#
+# Description: This script performs the normal steps involved in creating a new
+# user, including: copying user in active directory, assigning group membership, 
+# creating a home drive folder, setting permissions, creating an application
+# folder, setting permissions creating a folder based on the department the user 
+# is in, settings permissions, assigning gender in active directory, assigning
+# group(s) based on gender in active directory, assigning a manager, assigning a 
+# state, assiging a phone extension in active directory, puting the user in the 
+# correct OU in active directory, creating an exchange mailbox using the storage 
+# group with the most free space, handle errors and log the actions taken
+#
+# ********************************************************************************
+
+#Import Modules ******************************************************************
+
+Import-Module ActiveDirectory
+Add-PSSnapin  Microsoft.Exchange.Management.PowerShell.E2010
+
+#Set global variables ************************************************************
+#Set date-time stamp format
+
+$DTStamp = get-date -Format u | foreach {$_ -replace ":", "-"}
+$PathLog = "     "
+
+#User's home folder where they will store personal files
+
+$HomePath = "     "
+
+
+#Default user password
+
+$PlainPassword = "951753ghtWE23@&%tghnokjnh"
+$Password = $PlainPassword | ConvertTo-SecureString -AsPlainText -Force
+
+#Default domain controller 
+
+$Server = "     "
+$Domain = "     "
+
+#Default Exchange server
+
+$Exchange = "     1"
+
+
+#Log path for each time this script runs:
+
+$LogPath = "     "
+
+
+
+
+
+
+#Get user variables ***************************************************************
+Write-Host "##############################################"
+Write-Host "#                                            #"
+Write-Host "#  Welcome to the Create a New User Script!  #"
+Write-Host "#                                            #"
+Write-Host "##############################################"
+Write-Host " "
+$FirstName = Read-Host "First Name"
+$LastName = Read-Host "Last Name"
+$FullName = $FirstName + " " + $LastName
+$Email = "$FirstName+$LastName.Substring(0,1)@parkcitycu.org"
+
+#Get username to create and verify username isn't taken ***************************
+
+Function Get-Username {
+	$Global:Username = Read-Host "Username"
+	if ($Username -eq $null){
+        Write-Host "__________________________________________________"		
+        Write-Host "Username cannot be blank. Please re-enter username"
+		Get-Username
+	}
+    $TakenUsers = (get-aduser -Filter *).samaccountname
+    $Taken = $TakenUsers -contains "$Username"
+	if ($Taken -eq $True){
+        Write-Host "_______________________________________"
+        Write-Host "$Username is taken. Please try another."
+        Get-Username
+    }
+}
+Get-Username
+
+
+#Confirm username input accuracy **************************************************
+
+$No = "n", "N", "No", "NO"
+Write-Host " "
+Write-Host "____________________________________________"
+$Confirm = Read-Host "Is this username accurate: $Username (Y/N)"
+if ($No -contains $Confirm){
+        Get-Username
+    }
+
+
+
+#Get Manager and verify correct spelling ****************************************
+Function Get-Manager {
+	$Global:Manager = Read-Host "Manager"
+	if ($Manager -eq $null){
+		Write-Host "Manager cannot be blank. Please re-enter Manager."
+		Get-Manager
+	}
+    $AllUsers = (get-aduser -Filter *).samaccountname
+    $ManagerExists = $AllUsers -contains "$Manager"
+	if ($ManagerExists -eq $False){
+        Write-Host "_______________________________________"
+        Write-Host "$Manager does not exist or manager's username is incorrect. Please try another."
+        Get-Manager
+    }
+}
+Get-Manager
+
+#Get job title for new user *****************************************************
+
+$JobTitle = Read-Host "Job Title"
+
+#Choose template for new user ***************************************
+Write-Host "_____________________________________________________________"
+Write-Host "Please select a user acount to copy."
+Write-Host "Please note that the new user will be in the same groups as the user you copy."
+Write-Host " "
+Write-Host "_MOTelller1" -nonewline       
+Write-Host " " " " " " "| " " " "_MOTeller2"
+Write-Host "_MQTelller1" -nonewline       
+Write-Host " " " " " " "|" " " " _MQTeller2"
+Write-Host "_RHTelller1" -nonewline       
+Write-Host " " " " " " "| " " " "_RHTeller2"
+Write-Host "_TOTelller1" -nonewline       
+Write-Host " " " " " " "| " " " "_TOTeller2"
+Write-Host " "
+
+#Get peer user to copy and verify user exists ***********************************
+
+Function Get-Peer {
+	$Global:Peer = Read-Host "Name of Template to Copy"
+	if ($Peer -eq $null){
+    Write-Host "_____________________________________________________________"		
+    Write-Host "Peer username cannot be blank. Please re-enter peer username"
+		Get-Peer
+	}
+    $ExistingPeers = (get-aduser -Filter *).samaccountname
+    $Exists = $ExistingPeers -contains "$Peer"
+	if ($Exists -eq $False){
+        Write-Host "_______________________________________"
+        Write-Host "'$Peer' does not exist or cannot be found. Please try another."
+        Get-Peer}
+}
+Get-Peer
+$PeerGroups = (Get-ADPrincipalGroupMembership $Peer).name
+
+#Copy new user from defined 'Template' and set attributes ***************************
+
+New-ADUser -Instance $Peer -SamAccountName $Username -GivenName $FirstName -Surname $LastName -Name $Fullname -DisplayName $Fullname -UserPrincipalName $Username@$domain -AccountPassword $Password -HomeDirectory "$HomePath\$Username" -Enabled $True -Server $Server
+Set-ADUser $Username -Server $Server -Replace @{title="$JobTitle"}
+foreach ($Group in $PeerGroups | Where-Object {$_ -ne "Domain Users"})
+{
+	Add-ADGroupMember -Identity "$Group" -Members $Username -ErrorAction Ignore
+}
+
+#Declare additional variables ************************************************
+
+$Status = (Get-ADUser -Identity $Username -Server $Server).Enabled
+$UserGroups = Get-ADPrincipalGroupMembership $Username | Select Name
+$UserOU = Get-ADUser -Identity $Username -Server $Server | select @{l='Parent';e={([adsi]"LDAP://$($_.DistinguishedName)").Parent}}
+
+#Create user's home drive and set permissions ********************************
+
+New-Item -ItemType directory -Path "$HomePath\$Username" | Out-Null 
+
+
+#You must create a template folder with the default permissions you want at this location $HomePath\template-DoNotDeleteOrMove"
+
+$ACLp = (Get-Item "$HomePath\template-DoNotDeleteOrMove").GetAccessControl('Access')
+$ARpe = New-Object System.Security.AccessControl.FileSystemAccessRule("$Username","Modify","ContainerInherit,ObjectInherit","None","Allow") 
+$ACLp.AddAccessRule($ARpe)                                
+Set-ACL -Path "$HomePath\$Username" -ACLObject $ACLp
+$HomeDrive = "$HomePath\$Username"
+
+
+#Determine Exchange storage group with most free space ************************
+
+$UserCan = (Get-ADUser -Identity $Username -Server $Server -Property CanonicalName).CanonicalName
+$edbGUID = (Get-MailboxDatabase -server $Exchange | Sort-Object length | Select -First 1).guid
+$UserGUID = (Get-ADUser -Identity $Username -Server $Server).ObjectGUID
+$UserDN = (Get-ADUser -Identity $Username -Server $Server).distinguishedname
+
+#Create mailbox ***************************************************************
+
+Enable-Mailbox -DomainController $Server -Identity "$UserCan" -Alias "$Username" -Database "$edbGUID" -ManagedFolderMailboxPolicy "Mailbox Cleanup"
+
+# Write logs to log file ******************************************************
+#Append text file to confirming actions taken
+
+$UserGroups = (Get-ADPrincipalGroupMembership $Username).name
+
+Add-Content "$Pathlog\$username.txt" "Create User: $Fullname"
+Add-Content "$Pathlog\$username.txt" " "
+Add-Content “$Pathlog\$username.txt” "DateTime: $DTStamp"
+Add-Content “$Pathlog\$username.txt” "Account Enabled: $Status"
+Add-Content “$Pathlog\$username.txt” "Email: $Email"
+
+#$MailStatus = Get-Mailbox $Username
+
+Add-Content “$Pathlog\$username.txt” "Mailbox Created: $MailStatus"
+Add-Content “$Pathlog\$username.txt” "Copied from: $Peer"
+Add-Content “$Pathlog\$username.txt” "Group Membership: $UserGroups"
+Add-Content “$Pathlog\$username.txt” "ADUC Location: $UserCan"
+Add-Content “$Pathlog\$username.txt” "$Username U Drive created at $HomePath\$Username"
+Add-Content “$Pathlog\$username.txt” "Errors:"
+Add-Content “$Pathlog\$username.txt” "$Err1"
+Add-Content “$Pathlog\$username.txt” "$Err2"
+Add-Content “$Pathlog\$username.txt” "$Err3"
+Add-Content “$Pathlog\$username.txt” "$Err4"
+Add-Content “$Pathlog\$username.txt” "__________________________________________________________________________________"
+
+# Open log file for viewing at script completion *****************************
+& “$Pathlog\$username.txt”
+
+Write-Host " "
+Write-Host "##############################################"
+Write-Host "#                                            #"
+Write-Host "#                 User Created!              #"
+Write-Host "#                                            #"
+Write-Host "##############################################"
+Write-Host " "
+Write-Host "Press any key to continue ..."
+$x = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+-WhatIf
