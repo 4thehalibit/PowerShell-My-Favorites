@@ -1,0 +1,27 @@
+$managebde = invoke-command -ScriptBlock {manage-bde -status c:}
+$Lockstatus = ((($managebde | Select-String -Pattern "Protection Status:") -split ":")[1]).trimstart()
+
+switch ($(((($managebde | Select-String -Pattern "Conversion Status:") -split ":")[1]).trimstart())) {
+    {$_ -eq "Fully Encrypted" -and $lockstatus -eq "Protection On"} {$check = "Passed"}
+    {$_ -eq "Fully Encrypted" -and $Lockstatus -eq "Protection Off"} {$check = "Failed"}
+    {$_ -eq "Fully Decrypted" -and $Lockstatus -eq "Protection Off"} {$check = "Passed"}
+}
+
+New-ItemProperty -path 'HKLM:\SOFTWARE\CentraStage' -Name 'Custom20' -Value "$Lockstatus" -PropertyType ExpandString -Force >$null
+
+@"
+<-Start Result->
+Audit_Bitlocker = $($lockstatus | Out-String)
+<-End Result->
+
+<-Start Diagnostic->
+Please reach out to user to identify if there is any reason for Protection to be suspened. 
+Work towards resuming bitlocker protection
+
+$($managebde | Out-String)
+<-End Diagnostic->
+"@
+
+if ($check -eq "Failed") {
+    exit 1
+}
