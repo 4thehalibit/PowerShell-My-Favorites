@@ -1,0 +1,232 @@
+#######################################################################################
+#
+# This script gets all mailboxes and looks up each listed READ, Send-On-Behalf, of Full Access delegate.
+# If any delegate accounts are disabled in Active Directory, the account is removed from the mailbox.
+#
+#######################################################################################
+ 
+ 
+write-host ""
+write-host -foregroundcolor Green "Run this script in ExchangeShell (Tested Exchange 2013). Requires PS ActiveDirectory module."
+ 
+### Prompt for variables ###
+    # Domain name that appears in same account name. Example: <domain>\<username>
+    $DomainName = Read-host 'PARKCITY'
+ 
+# Import Active Directory Module
+Import-Module ActiveDirectory
+ 
+# Build AD User Hash Table - For lookups on whether an account is enabled or disabled.
+   $ADUserHash = @{}
+   $ADUsers = Get-ADUser -filter * | select SamAccountName,Enabled
+        foreach($user in $ADUsers){
+        $ADUserHash.Add($user.SamAccountName,$user.Enabled)
+        }
+ 
+# Create function to lookup account status from hash table. This is to avoid constant LDAP queries.
+    function ADUserCheck{
+    PARAM(
+    [Parameter(Mandatory=$true)][string]$identity
+    )
+    $HashResult = ($ADUserHash.GetEnumerator() | where {$_.name -eq $identity})
+    return $HashResult
+    }
+ 
+# Create function to export item to result report.
+    function Export-Results{
+    PARAM(
+    [Parameter(Mandatory=$False)][string]$MailboxN,
+    [Parameter(Mandatory=$False)][string]$UserN,
+    [Parameter(Mandatory=$False)][string]$ADStatus,
+    [Parameter(Mandatory=$False)][string]$AccessType,
+    [Parameter(Mandatory=$False)][string]$RemoveAction,
+    [Parameter(Mandatory=$False)][string]$Removed
+    )
+    $list = New-Object psobject
+            $list | add-member NoteProperty Mailbox $MailboxN
+            $list | add-member NoteProperty User $UserN
+            $list | add-member NoteProperty Delegate_Enabled $ADStatus
+            $list | add-member NoteProperty AccessRights $AccessType   #Add Report Entry
+            $list | add-member NoteProperty RemoveAction $RemoveAction
+            $list | add-member NoteProperty Removed $Removed
+            $list | export-csv -path $ReportLogName -append
+        
+            IF($Error -ne $Null){
+                     $error | out-file $ErrorLogName -append
+                     $error.clear()
+                     }
+    return $list                 
+    }
+ 
+# Create report file name to be created, along with error log.
+    $currentDate = Get-Date -format yyyy-MM-dd
+    $ErrorLogName = $PSScriptRoot+"\CleanUp_ErrorLog-"+$currentDate+".csv"
+    $ReportLogName = $PSScriptRoot+"\DelegateCleanUp-"+$currentDate+".csv"
+    
+# Clear any errors that might be stored.
+    $error.clear()
+ 
+ 
+#######################################################################################
+ 
+# Get mailboxes and then mailbox permissions. Do not include system accounts or inherited and denied accounts.
+$gmailbox = Get-Mailbox
+ 
+# Loop through each mailbox that is returned.
+#####################################
+ 
+foreach($n in $gmailbox){
+ 
+write-host -BackgroundColor white -ForegroundColor DarkRed "Mailbox is" $n.identity
+ 
+# Get mailbox delegates
+$box = get-mailboxpermission -identity $n.identity | where {($_.IsInherited -eq $False -AND $_.Deny -eq $False) -AND ($_.user.rawIdentity -like ($DomainName+"*"))}
+ 
+        # Be sure that variables are clear
+          $MailN = $Null
+          $UserN = $Null
+          $ADStatus = $Null
+ 
+        # Remove Full Access Delegates
+        #####################################
+ 
+        foreach($i in $box){
+ 
+write-host -BackgroundColor white -ForegroundColor DarkYellow "Full access Delegate is" $i.identity
+        
+                # Set report action
+                $RemoveAction = ""  
+ 
+          ##### Determine if FullAccess or Read Permission      
+                If ($i.AccessRights -match "FullAccess"){
+                $AccessType = "Full_Access"
+                }
+                if (($i.AccessRights -match "ReadPermission") -AND ($i.AccessRights -notmatch "FullAccess")){
+                $AccessType = "Read"
+                }
+        
+ 
+          ##### Lookup User in hash table, see if account is disabled.
+ 
+                # Use UserName (remove DomainName), which is the SamAccountName in AD.
+                $UserString = $(($i.user).ToString())                  # Convert to String
+                $ADSamAccount = $UserString.Replace(($DomainName+"\"),"")     # Remove "Domain\" 
+                $ADUser = ADUserCheck $ADSamAccount
+                
+     
+          ##### IF account is disabled, remove delegate from mailbox.
+ 
+                # IF FullAccess run this
+                IF ($ADUser.value -eq $False) {
+                    IF($AccessType -eq "Full_Access"){
+                    $DelegateIdentity = ($i.User.RawIdentity).ToString()
+                    Remove-MailboxPermission -Identity $i.identity -User $DelegateIdentity -AccessRights FullAccess -InheritanceType All -confirm:$false
+                           
+                    $RemoveAction = "Remove_Full-Access"  
+                    $Removed = $true
+                    
+                    write-host -ForegroundColor Green "Found FullAccess - issued commmand"
+                    }
+                # IF has READPermission run this
+                    IF($AccessType -eq "Read"){
+                    $UserSID = ($i.User.SecurityIdentifier).ToString() #Use this because using "domain\username" can fail. 
+                  
+                    Remove-MailboxPermission -Identity $i.identity -User $UserSID -AccessRights ReadPermission -InheritanceType All -confirm:$false
+                    
+                    $RemoveAction = "Remove_ReadPermission"  
+                    $Removed = $true
+                    
+                    write-host -ForegroundColor Green "Found ReadPermission - issued commmand"
+                    }  
+                  }
+          ##### Export Results to file.                
+          Export-Results -MailboxN $i.Identity -UserN $i.User -ADStatus $ADUser.Value -AccessType $AccessType -RemoveAction $RemoveAction -Removed $Removed
+          
+          $Removed = $NULL  # Reset Action Flag
+    
+    }
+ 
+ 
+    # Remove Send-As Delegates
+    #####################################
+ 
+    $RemoveSendAs = Get-ADPermission -identity $n.identity | Where-Object {($_.ExtendedRights -like "*send-as*") -and ($_.User.RawIdentity -like ($DomainName+"*"))}
+ 
+        ######## Loop through each permission result 
+        foreach($i in $RemoveSendAs){                  
+write-host -BackgroundColor white -ForegroundColor Darkgreen "Send access Delegate is" $i.identity
+            #### Lookup user in hash table, see if account is disabled
+ 
+                # Use UserName, remove "Domain\", which is the SamAccountName in AD.
+ 
+                $UserString = $(($i.user.RawIdentity).ToString())                  # Convert to String
+                $ADSamAccount = $UserString.Replace(($DomainName+"\"),"")     # Remove "Domain\" 
+                $ADUser = ADUserCheck $ADSamAccount           # Get AD User
+            
+                # Clear Report Action
+                $RemoveAction = ""
+                # Set access type for this section
+                $AccessType = "Send-As"
+                
+        
+            #### IF account if disabled, remove delegate from mailbox        
+            
+            # Determine if User Has Send-As Permission
+            IF ($ADUser.Value -eq $False) {
+        
+                # IF ReadAccess Run This 
+                IF(($UserString -match $ADUser.Name) -AND ($i.ExtendedRights.RawIdentity -like "*send-as*")){
+                    write-host -ForegroundColor Green "Found Send-AS- issued command"
+ 
+                    Remove-ADPermission -identity $n.identity -User $i.User.RawIdentity -ExtendedRights "Send As" -confirm:$false
+                    $RemoveAction = "Remove_Send-As"
+                    $Removed = $true
+                }        
+            }
+ 
+        ##### Export Results to file.             
+        Export-Results -MailboxN $i.Identity -UserN $i.User -ADStatus $ADUser.Value -AccessType $AccessType -RemoveAction $RemoveAction -Removed $Removed
+ 
+        $Removed = $NULL  # Reset Action Flag
+    }
+ 
+    # Remove Send On Behalf permissions
+    ##############################
+ 
+    #$onBehalf = get-mailbox -identity $n.identity | select -ExpandProperty GrantSendOnBehalfTo
+ 
+    foreach ($i in $onBehalf){
+ 
+            # Start Report Line, Add Entries
+            $RemoveAction = ""
+            # Set access type for this section
+            $AccessType = "Send-On-Behalf"
+ 
+        #### Query AD user by distinguished name.
+            $ADUser = Get-ADUser -Identity $i.DistinguishedName           # Get AD User
+ 
+            IF($ADUser.Enabled -eq $False){
+            write-host -ForegroundColor Green "Send On Behalf Permission Found. Issued Command"
+ 
+            # Remove permission from mailbox.
+            Set-Mailbox $n.identity -GrantSendOnBehalfTo @{remove=$i.DistinguishedName}
+            
+            # Set Report Action
+            $RemoveAction = "Remove_Send-On-Behalf"
+            $Removed = $true
+            }
+ 
+        ##### Export Results to file.
+          $MailboxN = $n.Identity
+          $UserN = $i.Name
+          $ADStatus = $ADUser.Enabled
+                
+        Export-Results
+ 
+        $Removed = $NULL #Reset Action Flag
+
+        -whatif
+    }
+ 
+}
+ 
