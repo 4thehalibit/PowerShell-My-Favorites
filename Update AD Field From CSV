@@ -1,0 +1,8 @@
+# CSV Fields
+# SamAccountName, Department (any other field)
+
+# Import AD Module           
+Import-Module ActiveDirectory           
+$users = Import-Csv -Path C:\Scripts\UpdateDepartment.csv                     
+foreach ($user in $users) 
+{Get-ADUser -Filter "SamAccountName -eq '$($user.samaccountname)'" | Set-ADUser -department $($User.Department)}
