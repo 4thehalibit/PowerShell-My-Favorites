@@ -1,0 +1,23 @@
+### SAMPLE ###
+# This will allow you to run a script and continue to run others 
+
+# End Running script with Unregister-Event 'event name'
+
+Register-EngineEvent -SourceIdentifier 'test' -Action {
+    Register-EngineEvent -SourceIdentifier 'newjob' -Forward
+    write-host $event.messagedata
+    new-event -SourceIdentifier 'newjob' -MessageData 'yeah again'
+
+}
+
+Register-EngineEvent -SourceIdentifier 'newjob' -Action {
+    write-host $event.messagedata
+}
+
+Start-Job -Name 'jobtest' -ScriptBlock {
+    Register-EngineEvent -SourceIdentifier 'test' -Forward
+    while ($true){
+        new-event -SourceIdentifier 'test' -MessageData 'something here'
+        sleep -Seconds 30
+    }
+}
