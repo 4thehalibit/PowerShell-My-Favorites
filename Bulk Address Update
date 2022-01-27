@@ -1,0 +1,78 @@
+# SET ADDRESS TAB WITHIN AD
+# phone parameters are -add, remove, -replace
+                         
+<#
+$TO = 'OU=Users,OU=,OU=,DC=,DC='
+
+    get-aduser -SearchBase "$to" -Filter * | 
+    Set-ADUser `
+        -StreetAddress "     " `
+        -City "Tomahawk" `
+        -State "WI" `
+        -PostalCode "54487" `
+        -Office "Tomahawk" `
+        -Company "     " `
+        -Add @{facsimileTelephoneNumber='     '} `
+        -Replace @{c="US";co="United States";countrycode=840;ipPhone="     "} `
+        -HomePage 
+
+#>
+
+
+<#
+ $RO = 'OU=Users,OU=,OU=,DC=,DC='
+
+    get-aduser -SearchBase "$ro" -Filter * | 
+       Set-ADUser `
+        -StreetAddress "    " `
+        -City "   " `
+        -State "WI" `
+        -PostalCode "54501" `
+        -Office "Rhinelander" `
+        -Company "     " `
+        -Add @{facsimileTelephoneNumber='     '} `
+        -replace @{c="US";co="United States";countrycode=840;ipPhone="    "} `
+        -HomePage     `
+        -POBox '464' `
+        
+#>
+
+
+<#
+$MO = 'OU=,OU=,OU=,DC=,DC='
+  
+    get-aduser -SearchBase "$mo" -Filter * | 
+       Set-ADUser `
+        -StreetAddress "    " `
+        -City "Merrill" `
+        -State "WI" `
+        -PostalCode "54452" `
+        -Office "     " `
+        -Company "     " `
+        -Add @{facsimileTelephoneNumber='     '} `
+        -Replace @{c="US";co="United States";countrycode=840;ipPhone="     "} `
+        -HomePage   `
+        -POBox '770'
+#>
+
+#### SPLATTING VERSION INCOMPLETE
+<#
+
+$TO = 'OU=Users,OU=,OU=,DC=,DC='
+$users = get-aduser -SearchBase "$mTO" -Filter * 
+foreach($user in $users){
+    $config = @{
+         StreetAddress = "**********" 
+         City          = "********" 
+         State         = "*******" 
+         PostalCode    = "*****" 
+         Office        = "******" 
+         Company       = "***********" 
+         Replace       = @{c="US";co="United States";countrycode=840}
+        }
+    Set-ADUser @config
+ }
+
+
+#>
+
