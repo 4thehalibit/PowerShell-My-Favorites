@@ -1,0 +1,1 @@
+Get-ADUser -Filter * -Properties officePhone, givenName, sn, sAMAccountName, EmailAddress | select officePhone, givenName, sn, sAMAccountName, EmailAddress | Export-CSV "C:\Scripts\Email_Addresses.csv"
