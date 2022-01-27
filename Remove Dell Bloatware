@@ -1,0 +1,17 @@
+$ErrorActionPreference = "stop"
+try {
+    # Remove all MSI Dell software
+    get-package | Where-Object {$_.name -like "Dell*" -and $_.providerName -eq "MSI"} | uninstall-package -Verbose -Force
+
+    # Removing Dell Optimizer
+    start-process -FilePath "C:\Program Files (x86)\InstallShield Installation Information\{286A9ADE-A581-43E8-AA85-6F5D58C7DC88}\DellOptimizer.exe" -ArgumentList "/remove /silent" -wait
+
+    # Removing Dell Support Assist Plugin
+    start-process -FilePath "C:\ProgramData\Package Cache\{eb4d8dd7-ae4c-442d-8d21-8bfb73c03748}\DellUpdateSupportAssistPlugin.exe" -ArgumentList "/uninstall" -wait
+
+    # Removing Dell Support Assist Remediation Service
+    start-process -FilePath "C:\ProgramData\Package Cache\{85538c44-3493-4bf6-8d8b-aa13aee53222}\DellSupportAssistRemediationServiceInstaller.exe" -ArgumentList "/uninstall" -wait
+}
+catch {
+    $_.Exception
+}
