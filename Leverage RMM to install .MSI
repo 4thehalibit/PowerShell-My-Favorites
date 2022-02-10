@@ -1,0 +1,4 @@
+# upload .msi to proper platoform and use following script to install some path locations may be different for different RMM soloutions following is for DattoRMM
+
+$path = (Get-Location).Path
+Start-Process -FilePath msiexec.exe -ArgumentList "/i $path\webexplugin.msi"
