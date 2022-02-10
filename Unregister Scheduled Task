@@ -1,0 +1,3 @@
+# This job will unregister a scheduled task extremely usefull to run against multiple computers at one time
+
+Unregister-ScheduledTask -TaskName "$env:Task" -Confirm:$false
