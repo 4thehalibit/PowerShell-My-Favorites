@@ -1,0 +1,17 @@
+# Search for locked out AD Accounts
+Search-ADAccount -LockedOut
+
+# Unlock locked ad accounts ALL
+Search-ADAccount -Lockedout | Unlock-AdAccount
+
+Schedule job to run  this code is every 5 seconds for 10 minutes
+
+$timer = new-timespan -Minutes 10
+$clock = [diagnostics.stopwatch]::StartNew()
+while ($clock.elapsed -lt $timer){
+$command=Search-ADAccount -Lockedout | Unlock-AdAccount
+cls
+$command
+start-sleep -seconds 120
+}
+write-host "Timer end"
