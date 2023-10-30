@@ -1,0 +1,122 @@
+# Middle initial information for new user is currently not working.
+# It is commented out. but is being worked on.
+
+# Prompt the user for the required parameters
+$FirstName = Read-Host "Enter the first name for the new user"
+# $MiddleInitial = Read-Host "Enter the middle initial for the new user (Optional)"
+$LastName = Read-Host "Enter the last name for the new user"
+
+# Generate the initial SamAccountName
+$SamAccountName = $FirstName.Substring(0, 1) + $LastName
+
+# Check if the SamAccountName is unique
+while (Get-ADUser -Filter "SamAccountName -eq '$SamAccountName'") {
+    Write-Host "A user with the same SamAccountName already exists."
+    # $MiddleInitial = Read-Host "Enter the middle initial for the new user"
+    $SamAccountName = $FirstName.Substring(0, 1) + $LastName
+}
+
+# if ($MiddleInitial) {
+#     $DisplayName = "$FirstName $MiddleInitial. $LastName"
+# } else {
+$DisplayName = "$FirstName $LastName"
+# }
+
+$UserPrincipalName = "$SamAccountName@contoso.com"
+$Password = Read-Host "Enter the password for the new user" -AsSecureString
+$OfficePhone = Read-Host "Enter the office phone number for the new user"
+$Mobile = Read-Host "Enter the mobile number for the new user"
+
+# Create the hashtable for splatting
+$userParams = @{
+    SamAccountName = $SamAccountName
+    UserPrincipalName = $UserPrincipalName
+    GivenName = $FirstName
+    Surname = $LastName
+    DisplayName = $DisplayName
+    Name = $DisplayName
+    AccountPassword = $Password
+    Enabled = $true
+    OfficePhone = $OfficePhone
+    MobilePhone = $Mobile
+}
+
+# Create the new AD user using splatting
+New-ADUser @userParams
+
+# Prompt the user to enter the SamAccountName of the existing user to copy properties from
+$SourceSamAccountName = Read-Host "Enter the SamAccountName of the user to copy properties from"
+
+# Copy properties from the existing user to the new user
+$CopyFromUser = Get-ADUser -Filter "SamAccountName -eq '$SourceSamAccountName'" -Properties MemberOf, DistinguishedName, StreetAddress, Title, Company, PostalCode, Department, City, State, Manager, Office
+$CopyToUser = Get-ADUser -Filter "SamAccountName -eq '$SamAccountName'" -Properties MemberOf, DistinguishedName, Manager
+
+$CopyToUserParams = @{
+    Identity = $SamAccountName
+    Manager = $CopyFromUser.Manager
+    Office = $CopyFromUser.Office
+}
+
+Set-ADUser @CopyToUserParams
+
+# Add the new user to the same groups as the existing user
+$CopyToUserGroups = $CopyFromUser.MemberOf | Where-Object { $CopyToUser.MemberOf -notcontains $_ }
+foreach ($group in $CopyToUserGroups) {
+    Add-ADGroupMember -Identity $group -Members $SamAccountName
+}
+
+$Dname = $CopyFromUser.DistinguishedName.Split(',', 2)[1]
+
+Move-ADObject -Identity $CopyToUser.DistinguishedName -TargetPath $Dname
+
+if ($CopyFromUser.StreetAddress -or $CopyFromUser.Title -or $CopyFromUser.Company -or $null -ne $CopyFromUser.PostalCode) {
+    try {
+        $ErrorActionPreference = 'stop'
+        $SetADUserParams = @{
+            Identity = $SamAccountName
+            StreetAddress = $CopyFromUser.StreetAddress
+            PostalCode = $CopyFromUser.PostalCode
+            Title = $CopyFromUser.Title
+            Company = $CopyFromUser.Company
+            Department = $CopyFromUser.Department
+            City = $CopyFromUser.City
+            State = $CopyFromUser.State
+        }
+        Set-ADUser @SetADUserParams
+    } catch {
+        Write-Warning $_
+    }
+}
+
+# Enable remote mailbox for the new user
+Enable-RemoteMailbox -Identity $SamAccountName -RemoteRoutingAddress "$SamAccountName$MiddleInitial@lselectric.mail.onmicrosoft.com" 
+
+
+# Define ASCII art decoration
+$Decoration = @"
+**********************
+*    User Created!   *
+**********************
+"@
+
+# Get the remote address
+$RemoteAddress = (Get-RemoteMailbox -Identity $SamAccountName).RemoteRoutingAddress
+
+# Verify if the remote address was created successfully
+if ($RemoteAddress) {
+    $Decoration | Write-Host -ForegroundColor Cyan
+    Write-Host "Display Name: " -NoNewline
+    Write-Host $DisplayName -ForegroundColor Green
+    Write-Host "SamAccountName: " -NoNewline
+    Write-Host $SamAccountName -ForegroundColor Green
+    Write-Host "UserPrincipalName: " -NoNewline
+    Write-Host $UserPrincipalName -ForegroundColor Green
+    Write-Host "Office Phone: " -NoNewline
+    Write-Host $OfficePhone -ForegroundColor Green
+    Write-Host "Mobile: " -NoNewline
+    Write-Host $Mobile -ForegroundColor Green
+    Write-Host "Remote Address: " -NoNewline
+    Write-Host $RemoteAddress -ForegroundColor Green
+} else {
+    Write-Host -ForegroundColor Red "Failed to retrieve the remote address."
+}
