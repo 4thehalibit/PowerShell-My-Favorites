@@ -14,31 +14,45 @@ in various environments.
 #           Variables          #
 ################################
 
-# Email account to send the email from (replace with your organization's email address)
-$From = "PasswordExpiration@yourdomain.com"  # Change "yourdomain.com" to match your organization.
+# Email account to send the email from
+$From = "PasswordExpiration@lselectric.com"
 
-# Mail server to send the email from (replace with your SMTP server address)
-$SMTPServer = "your-smtp-server.com"  # Replace "your-smtp-server.com" with your SMTP server.
+# Mail server to send the email from
+$SMTPServer = "COMPANY-com.mail.protection.outlook.com"
 
 # Subject of the email
 $MailSubject = "Windows Password Reminder: Your password will expire soon."
 
 # Days before expiration for specific notifications
-$DaysBeforeExpiry15 = 15  # Adjust this value if you want a different early notification timeframe.
-$DaysBeforeExpiry7 = 7    # Adjust this value if you want another notification timeframe.
+$DaysBeforeExpiry15 = 15
+$DaysBeforeExpiry7 = 7
 
 # Log file for tracking email errors and successes
-$LogFile = "C:\Scripts\PasswordExpiryLog.txt"  # Ensure the path is accessible and writable.
+$LogFile = "C:\Scripts\PasswordExpiryLog.txt"
+
+# Check if the log file exists and if it is older than 30 days
+if (Test-Path -Path $LogFile) {
+    $LogFileAge = (Get-Date) - (Get-Item -Path $LogFile).CreationTime
+    if ($LogFileAge.Days -ge 30) {
+        # Delete and recreate the log file if it's older than 30 days
+        Remove-Item -Path $LogFile -Force
+        Write-Host "Log file is older than 30 days. Recreating the log file."
+        New-Item -ItemType File -Path $LogFile -Force
+    }
+} else {
+    # Create the log file if it doesn't exist
+    New-Item -ItemType File -Path $LogFile -Force
+}
 
 # Testing settings "Yes,No"
-$SetupForTesting = "No"  # Set to "Yes" for testing with a single user, "No" for production.
-$TestingUsername = "testuser"  # Replace "testuser" with a valid AD username for testing. Emails will be sent to that user se your self for best results. 
+$SetupForTesting = "No"
+$TestingUsername = "USERNAME" # Your username to test email. doesnt matter if pasword is expiring
 
 # For testing, manually set DaysLeft (e.g., 15, 7, or any day within 6 to 0 to simulate daily reminders)
-$TestDaysLeft = $null  # Set to desired test value or set to $null to use actual calculation.
+$TestDaysLeft = $null  # Set to desired test value or set to $null to use actual calculation
 
 ################################
-# Don't modify line 41-116     #
+# Don't modify below this line #
 ################################
 
 # Import Active Directory module
@@ -113,24 +127,19 @@ if ($CommandToGetInfoFromAD -ne $null) {
                     Priority = $Priority  # Sets email priority based on days left
                 }
 
-##############################################
-# Modify Below
+    # Customize email message based on DaysLeft
+    if ($DaysLeft -eq $DaysBeforeExpiry15) {
+        $MsgBody = "<p>$UserName,</p><p>Your Windows password will expire in <span style='font-weight: bold; color: #DAA520;'>15 days</span>, on $ExpiryDateForEmail. Please change it <span style='color: red; font-weight: bold;'>before expiration</span> to prevent access issues.</p>"
+    } elseif ($DaysLeft -eq $DaysBeforeExpiry7) {
+        $MsgBody = "<p>$UserName,</p><p>Your Windows password will expire in <span style='font-weight: bold; color: #FFA500;'>7 days</span>. The system is still waiting for you to change your password to ensure uninterrupted access.</p>"
+    } elseif ($DaysLeft -eq 0) {
+        $MsgBody = "<p>$UserName,</p><p><span style='font-weight: bold; color: red;'>Critical:</span> Your Windows password <span style='color: red; font-weight: bold;'>expires within 24 hours</span>. You need to change it <span style='color: red; font-weight: bold;'>immediately</span> to avoid loss of access.</p>"
+    } elseif ($DaysLeft -le 6 -and $DaysLeft -gt 0) {
+        $MsgBody = "<p>$UserName,</p><p><span style='font-weight: bold; color: red;'>Urgent Reminder:</span> Your Windows password expires in <span style='font-weight: bold; color: red;'>$DaysLeft day(s)</span>, on $ExpiryDateForEmail. Please update it immediately.</p>"
+    }
 
-# Customize email message based on DaysLeft basic email info can bo modifoed shouldnt need to be. 
-                if ($DaysLeft -eq $DaysBeforeExpiry15) {
-                    $MsgBody = "<p>$UserName,</p><p>Your Windows password will expire in <span style='font-weight: bold; color: #DAA520;'>15 days</span>, on $ExpiryDateForEmail. Please change it <span style='color: red; font-weight: bold;'>before expiration</span> to prevent access issues.</p>"
-                } elseif ($DaysLeft -eq $DaysBeforeExpiry7) {
-                    $MsgBody = "<p>$UserName,</p><p>Your Windows password will expire in <span style='font-weight: bold; color: #FFA500;'>7 days</span>. The system is still waiting for you to change your password to ensure uninterrupted access.</p>"
-                } elseif ($DaysLeft -eq 0) {
-                    $MsgBody = "<p>$UserName,</p><p><span style='font-weight: bold; color: red;'>Critical:</span> Your Windows password <span style='color: red; font-weight: bold;'>expires within 24 hours</span>. You need to change it <span style='color: red; font-weight: bold;'>immediately</span> to avoid loss of access.</p>"
-                } elseif ($DaysLeft -le 6 -and $DaysLeft -gt 0) {
-                    $MsgBody = "<p>$UserName,</p><p><span style='font-weight: bold; color: red;'>Urgent Reminder:</span> Your Windows password expires in <span style='font-weight: bold; color: red;'>$DaysLeft day(s)</span>, on $ExpiryDateForEmail. Please update it immediately.</p>"
-                }
-
-# Additional instructions common to all notifications 
-
-# Modify to meet bussiness needs and tone
-                $MsgBody += "@"
+                # Additional instructions common to all notifications
+                $MsgBody += @"
 <p><strong>To change your password in SharePoint, please follow these steps:</strong></p>
 <ol>
     <li>Click your profile picture (or initials) in the top right corner of the SharePoint page.</li>
@@ -152,11 +161,11 @@ if ($CommandToGetInfoFromAD -ne $null) {
 <p>After clearing, you will need to re-enter your username and password the next time you connect to the VPN.</p>
 <p><strong>Important Note:</strong> Please allow time for your new password to sync across all systems. You will need to sign in to each software application again as they update with your new password. Additionally, if you are working remote your computer password will sync once you connect to the VPN using your new credentials.</p>
 
-<p><em>You can also find these instructions by going to</em> <strong>SharePoint</strong> <em>and navigating to</em> <strong>IT and Systems</strong>. <em>Search for</em> "<strong>VPN</strong>" <em>or</em> "<strong>Password</strong>" <em>to access vdeo instructions on password changes and clearing VPN credentials.</em></p>
-i
+<p><em>You can also find these instructions by going to</em> <strong>SharePoint</strong> <em>and navigating to</em> <strong>IT and Systems</strong>. <em>Search for</em> "<strong>VPN</strong>" <em>or</em> "<strong>Password</strong>" <em>to access video instructions on password changes and clearing VPN credentials.</em></p>
+
 <p>Thank you,<br>
 IT Department<br>
-Your IT Support Contact Info<br><a href="mailto:support@yourdomain.com">support@yourdomain.com</a></p>
+715-241-3293<br><a href="mailto:support@lselectric.com">support@lselectric.com</a></p>
 "@
 
                 ### Try to send email to user with the message in $MsgBody variable and the supplied @MailProperties.
